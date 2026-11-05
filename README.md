@@ -4,7 +4,6 @@ Ask a question about a set of documents and get an answer that cites the exact p
 PDF, PowerPoint, Word, images, Markdown and text, indexes every page both as text and as an image, and is evaluated on
 a 415-page textbook from the ViDoRe V3 benchmark.
 
-**Live dashboard:** https://rag-autopilot.vercel.app
 
 - **Baseline:** hybrid retrieval (BGE-M3 dense + BM25 sparse, merged with RRF).
 - **Improvement:** the same pipeline plus a cross-encoder reranker (bge-reranker-v2-m3) over the top 20 pages.
