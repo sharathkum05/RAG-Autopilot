@@ -109,15 +109,30 @@ def retrieve(question: str, workspace: str, config: str = "fused_rerank", k: int
     timings: dict[str, int] = {}
     te = text_embedder()
 
-    def timed(name: str, detail: str, fn):
+    def ranked(pairs, n: int = 20) -> list[dict]:
+        """A stage's ranked pages for its trace span: rank, page number, score (page ids are `<doc>:<page>`)."""
+        return [{"rank": r, "page": int(pid.rsplit(":", 1)[-1]) if pid.rsplit(":", 1)[-1].isdigit() else None, "page_id": pid, "score": round(float(sc), 4)}
+                for r, (pid, sc, *_) in enumerate(list(pairs)[:n], start=1)]
+
+    def timed(name: str, detail: str, fn, summary=None):
+        """Runs one stage under its own span. `summary(out)` turns the stage's result into the span output (its ranked
+        pages), so a trace shows where a correct page entered or dropped out of the list."""
         on_step(name, detail, "active", None)
         t0 = time.perf_counter()
         obs = child(trace, name, input={"detail": detail})
+        out, ok = None, False
         try:
             out = fn()
+            ok = True
         finally:
             ms = int((time.perf_counter() - t0) * 1000)
-            end(obs, metadata={"ms": ms})
+            span_out = None
+            if summary is not None and ok and obs is not None:
+                try:
+                    span_out = summary(out)
+                except Exception:  # noqa: BLE001  tracing must never break retrieval
+                    span_out = None
+            end(obs, output=span_out, metadata={"ms": ms})
         timings[name] = ms
         on_step(name, detail, "done", ms)
         return out
@@ -137,7 +152,8 @@ def retrieve(question: str, workspace: str, config: str = "fused_rerank", k: int
     # 2. visual path → pages
     visual_hits: list[tuple[str, float, dict]] = []
     if visual_on:
-        visual_hits = timed("Visual search", f"{s.pages_collection} · MaxSim · top {s.top_k_per_path}", lambda: search_visual(enc["qv"], enc["qp"], workspace, s.top_k_per_path))
+        visual_hits = timed("Visual search", f"{s.pages_collection} · MaxSim · top {s.top_k_per_path}", lambda: search_visual(enc["qv"], enc["qp"], workspace, s.top_k_per_path),
+                            summary=lambda hits: {"pages": ranked(hits)})
 
     # 3. text path → chunks → pages
     text_pages: list[tuple[str, float]] = []
@@ -152,7 +168,8 @@ def retrieve(question: str, workspace: str, config: str = "fused_rerank", k: int
                     text_pages.append((pid, score))
                 if len(text_pages) >= s.top_k_per_path:
                     break
-        timed("Text search", f"{s.chunks_collection} · {' + '.join(x for x, on in (('dense', dense_on), ('BM25', bm25_on)) if on)} · top {s.top_k_per_path}", _text)
+        timed("Text search", f"{s.chunks_collection} · {' + '.join(x for x, on in (('dense', dense_on), ('BM25', bm25_on)) if on)} · top {s.top_k_per_path}", _text,
+              summary=lambda _: {"pages": [dict(row, chunk=best_chunk[pid]["id"]) for row, (pid, _sc) in zip(ranked(text_pages), text_pages)]})
 
     # 4. fuse
     lists = [l for l in ([(p, sc) for p, sc, _ in visual_hits], text_pages) if l]
@@ -160,7 +177,7 @@ def retrieve(question: str, workspace: str, config: str = "fused_rerank", k: int
         if len(lists) > 1:
             return rrf(lists, s.rrf_k)
         return [(pid, sc, {0: r + 1}) for r, (pid, sc) in enumerate(lists[0])] if lists else []
-    fused = timed("Fusing", f"reciprocal rank fusion → {s.fused_k} pages", _fuse)[: s.fused_k]
+    fused = timed("Fusing", f"reciprocal rank fusion → {s.fused_k} pages", _fuse, summary=lambda out: {"pages": ranked(out, s.fused_k)})[: s.fused_k]
 
     vis_rank = {pid: (r + 1, sc) for r, (pid, sc, _) in enumerate(visual_hits)}
     txt_rank = {pid: (r + 1, sc) for r, (pid, sc) in enumerate(text_pages)}
@@ -176,7 +193,7 @@ def retrieve(question: str, workspace: str, config: str = "fused_rerank", k: int
             for pid, sc in zip(page_ids, scores):
                 rr_score[pid] = float(sc)
             return sorted(((pid, rr_score[pid]) for pid in page_ids), key=lambda x: -x[1])
-        order = timed("Reranking", f"{s.rerank_model.split('/')[-1]} → top {k}", _rerank)
+        order = timed("Reranking", f"{s.rerank_model.split('/')[-1]} → top {k}", _rerank, summary=lambda out: {"pages": ranked(out), "kept": k})
 
     # 6. evidence records
     top = order[:k]

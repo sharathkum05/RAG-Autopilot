@@ -208,7 +208,8 @@ def main() -> None:
         refs = [str(q.answer)] + [str(a) for a in (q.raw_answers if q.raw_answers is not None else []) if str(a) != str(q.answer)]
         rel_pages = sorted({p for p, _ in relevant.get(qid, [])})
         trace = start_trace("answer_eval", input={"question": q.query, "workspace": WORKSPACE, "config": args.config},
-                            metadata={"eval_run": run_id, "query_id": qid, "query_types": qtypes, "source": "answer_eval"})
+                            metadata={"eval_run": run_id, "query_id": qid, "query_types": qtypes, "source": "answer_eval",
+                                      "expected_pages": rel_pages})   # gold pages, to compare with each stage's ranked list
         t0 = time.perf_counter()
         with encode_lock:
             res = retrieve(q.query, WORKSPACE, args.config, k=10, trace=trace)
