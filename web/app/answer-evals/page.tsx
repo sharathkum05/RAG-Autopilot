@@ -294,22 +294,6 @@ export default function AnswerEvalsPage() {
               <p className="max-w-[90ch] text-xs text-muted-foreground">
                 <RoleBadge role="baseline" /> {labels[0]} and <RoleBadge role="improvement" /> {labels[1]} answered the same {sample ? `seeded sample of ${sample.n} benchmark queries (seed ${sample.seed})` : `${ref?.summary.n_queries} benchmark queries`} exactly as the app does: retrieve, read the top {ref?.n_pages} pages, answer with {ref?.answer_model}, cite. Every answer is then graded twice, independently. {impr.hardware} · {when(impr.created_at)}.
               </p>
-              <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-xl border border-border bg-card p-3 text-[12.5px]">
-                  <div className="flex items-center gap-2"><Badge variant="outline" className="font-mono text-[10px]">1</Badge><span className="font-medium">Deterministic checks</span><span className="text-muted-foreground">pipeline/checks.py</span></div>
-                  <p className="mt-1.5 text-muted-foreground">Six pure functions of the answer, its citations, the pages shown, the reference answers and the page labels. Weighted into a 0 to 1 score, pass at {base.rubric.threshold}. No model, no randomness: the same answer always scores the same.</p>
-                </div>
-                <div className="rounded-xl border border-border bg-card p-3 text-[12.5px]">
-                  <div className="flex items-center gap-2"><Badge variant="outline" className="font-mono text-[10px]">2</Badge><span className="font-medium">LLM as judge</span><span className="text-muted-foreground">pipeline/judge.py · {o.judge_rubric?.model ?? impr.judge_model}</span></div>
-                  <p className="mt-1.5 text-muted-foreground">A frozen model reads the question, the reference, the page excerpts the answering model saw, and the answer. It scores relevance, groundedness, correctness and coherence from 1 to 5; overall is their mean.</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <DeltaCard label="Time to answer p50" b={B.latency_ms.total.p50} i={I.latency_ms.total.p50} fmt={secs} better="down" />
-                <DeltaCard label="Retrieval p50" b={B.latency_ms.retrieval?.p50} i={I.latency_ms.retrieval?.p50} fmt={(v) => `${Math.round(v)} ms`} better="down" />
-                <DeltaCard label="Answer cost per query" b={B.cost_usd / Math.max(1, B.n_queries)} i={I.cost_usd / Math.max(1, I.n_queries)} fmt={(v) => `$${v.toFixed(3)}`} better="down" />
-                <DeltaCard label="Judge cost per run" b={B.judge?.cost_usd} i={I.judge?.cost_usd} fmt={(v) => `$${v.toFixed(3)}`} better="down" />
-              </div>
             </section>
             <section className="grid gap-3">
               <Toggle<Tab> value={tab} onChange={setTab} opts={[["checks", "Deterministic checks"], ["judge", "LLM as judge"]]} />
