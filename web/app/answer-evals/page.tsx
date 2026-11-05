@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AppShell } from "@/components/app-shell";
 import { MessageLoading } from "@/components/ui/message-loading";
@@ -39,7 +38,6 @@ const pctf = (v: number) => `${(v * 100).toFixed(1)}%`;
 const f2 = (v: number) => v.toFixed(2);
 const f3 = (v: number) => v.toFixed(3);
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
-const when = (iso: string) => iso.replace("T", " ").slice(0, 16);
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
@@ -47,9 +45,6 @@ function Th({ children, right }: { children: React.ReactNode; right?: boolean })
 }
 function Td({ children, right, mono, className }: { children: React.ReactNode; right?: boolean; mono?: boolean; className?: string }) {
   return <td className={cn("px-3 py-2 align-top", right && "text-right", mono && "font-mono text-[12.5px]", className)}>{children}</td>;
-}
-function RoleBadge({ role }: { role: Role }) {
-  return <Badge variant="outline" className={cn("font-mono text-[10px] uppercase", role === "improvement" && "border-success/50 text-success")}>{role}</Badge>;
 }
 function Toggle<T extends string>({ value, onChange, opts }: { value: T; onChange: (v: T) => void; opts: [T, string][] }) {
   return (
@@ -59,65 +54,37 @@ function Toggle<T extends string>({ value, onChange, opts }: { value: T; onChang
   );
 }
 
-// ------------------------------------------------------------------ baseline → improvement cards
+// ------------------------------------------------------------------ one results table per eval
 
-function DeltaCard({ label, b, i, fmt, better }: { label: string; b: number | null | undefined; i: number | null | undefined; fmt: (v: number) => string; better?: "up" | "down" }) {
-  const ok = b != null && i != null;
-  const same = ok && fmt(b as number) === fmt(i as number);          // equal at display precision
-  const d = ok ? (i as number) - (b as number) : 0;
-  const good = better && ok && !same ? (better === "up" ? d > 0 : d < 0) : null;
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-      <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 flex items-baseline gap-2 font-mono text-[13px]">
-        <span className="text-muted-foreground">{b != null ? fmt(b) : "–"}</span><span className="text-muted-foreground">→</span>
-        <span className="text-[15px] font-medium">{i != null ? fmt(i) : "–"}</span>
-        {ok && !same ? <span className={cn("text-[11px]", good == null ? "text-muted-foreground" : good ? "text-success" : "text-destructive")}>{d > 0 ? "+" : ""}{fmt === pctf ? `${(d * 100).toFixed(1)} pts` : fmt(d)}</span> : null}
-      </div>
-    </div>
-  );
-}
+interface Row { label: string; hint?: string; weight?: string; b: number | null | undefined; i: number | null | undefined; fmt: (v: number) => string; lowerIsBetter?: boolean; strong?: boolean }
 
-// ------------------------------------------------------------------ pipeline 1: deterministic checks
-
-function ChecksTable({ base, impr, labels }: { base: RunRow; impr: RunRow; labels: [string, string] }) {
-  const w = base.rubric.weights, d = base.rubric.descriptions;
-  const cell = (s: Summary, c: string) => { const st = s.checks[c]; return st ? `${st.mean != null ? st.mean.toFixed(2) : "–"} · full ${pctf(st.pass_rate)}` : "–"; };
+/** Metric · weight · baseline · reranker · change. Descriptions sit in the row's tooltip, not in a column. */
+function ResultsTable({ rows, showWeight, note }: { rows: Row[]; showWeight?: boolean; note: string }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <table className="w-full text-[13px]">
-        <thead className="border-b border-border"><tr><Th>check</Th><Th right>weight</Th><Th>what it tests</Th><Th right>{labels[0]}</Th><Th right>{labels[1]}</Th></tr></thead>
+        <thead className="border-b border-border"><tr><Th>metric</Th>{showWeight ? <Th right>weight</Th> : null}<Th right>baseline</Th><Th right>reranker</Th><Th right>change</Th></tr></thead>
         <tbody>
-          {CHECK_ORDER.filter((c) => base.summary.checks[c] || impr.summary.checks[c]).map((c) => (
-            <tr key={c} className="border-b border-border">
-              <Td className="font-medium">{CHECK_LABEL[c] ?? c}</Td><Td right mono>{w[c] != null ? w[c] : "info"}</Td>
-              <Td className="text-[12px] text-muted-foreground">{d[c]}</Td>
-              <Td right mono className="text-muted-foreground">{cell(base.summary, c)}</Td><Td right mono>{cell(impr.summary, c)}</Td>
-            </tr>
-          ))}
-          <tr><Td className="font-medium">Refusal gate</Td><Td right mono>gate</Td><Td className="text-[12px] text-muted-foreground">{d.refusal}</Td><Td right mono className="text-muted-foreground">{base.summary.refusals} declines</Td><Td right mono>{impr.summary.refusals} declines</Td></tr>
+          {rows.map((r) => {
+            const ok = r.b != null && r.i != null;
+            const d = ok ? (r.i as number) - (r.b as number) : 0;
+            const same = !ok || r.fmt(r.b as number) === r.fmt(r.i as number);
+            const good = r.lowerIsBetter ? d < 0 : d > 0;
+            return (
+              <tr key={r.label} className="border-b border-border last:border-b-0" title={r.hint}>
+                <Td className={cn(r.strong ? "font-medium" : "text-muted-foreground", r.hint && "cursor-help")}>{r.label}</Td>
+                {showWeight ? <Td right mono className="text-muted-foreground">{r.weight ?? ""}</Td> : null}
+                <Td right mono className="text-muted-foreground">{r.b != null ? r.fmt(r.b) : "–"}</Td>
+                <Td right mono className={r.strong ? "font-medium" : ""}>{r.i != null ? r.fmt(r.i) : "–"}</Td>
+                <Td right mono className={same ? "text-muted-foreground" : good ? "text-success" : "text-destructive"}>
+                  {same ? "–" : `${d > 0 ? "+" : "−"}${r.fmt(Math.abs(d)).replace("%", " pts")}`}
+                </Td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">Each check is a pure function of the answer, its citations, the pages shown to the model, the reference answers and the page labels. No model is involved. Query score = weighted mean over the checks that apply; pass at {base.rubric.threshold}. Cells show mean · share of queries at full marks.</div>
-    </div>
-  );
-}
-
-function Groups({ title, base, impr, labels, names }: { title: string; base: Record<string, Group>; impr: Record<string, Group>; labels: [string, string]; names?: Record<string, string> }) {
-  const keys = Array.from(new Set([...Object.keys(base), ...Object.keys(impr)])).sort((a, b) => (impr[b]?.n ?? base[b]?.n ?? 0) - (impr[a]?.n ?? base[a]?.n ?? 0));
-  return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-full text-[13px]">
-        <thead className="border-b border-border"><tr><Th>{title}</Th><Th right>queries</Th><Th right>{labels[0]} pass</Th><Th right>{labels[1]} pass</Th></tr></thead>
-        <tbody>
-          {keys.map((k) => { const b = base[k], i = impr[k]; const d = b && i ? i.pass_rate - b.pass_rate : 0; return (
-            <tr key={k} className="border-b border-border last:border-b-0">
-              <Td className="font-medium">{names?.[k] ?? k}</Td><Td right mono>{i?.n ?? b?.n}</Td>
-              <Td right mono className="text-muted-foreground">{b ? pctf(b.pass_rate) : "–"}</Td>
-              <Td right mono className={cn(d > 1e-9 ? "text-success" : d < -1e-9 ? "text-destructive" : "")}>{i ? pctf(i.pass_rate) : "–"}</Td>
-            </tr>); })}
-        </tbody>
-      </table>
+      <div className="border-t border-border px-3 py-2 text-[11.5px] text-muted-foreground">{note}</div>
     </div>
   );
 }
@@ -225,34 +192,8 @@ function Queries({ run, tab }: { run: FullRun; tab: Tab }) {
         {["all", ...types].map((t) => <button key={t} type="button" onClick={() => setType(t)} className={cn("rounded-full border border-border px-3 py-1 text-xs hover:border-foreground", type === t && "border-foreground bg-secondary")}>{t}</button>)}
         <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} className="accent-foreground" />{tab === "checks" ? "failures only" : "below 4 / 5 only"}</label>
       </div>
-      <div className="text-xs text-muted-foreground">{rows.length} of {run.per_query.length} queries. Expand a row for the answer next to the reference{tab === "checks" ? ", anchors it hit in green, missed struck through" : " and the judge's one-line reason"}.</div>
+      <div className="text-xs text-muted-foreground">{rows.length} of {run.per_query.length} questions. Open one to see the answer next to the reference.</div>
       <div className="grid gap-1.5">{rows.map((q) => <QueryRow key={q.query_id} q={q} tab={tab} />)}</div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------------ pipeline 2: LLM as judge
-
-function JudgeRubricCard({ rubric, base, impr }: { rubric?: JudgeRubric; base: RunRow; impr: RunRow }) {
-  const jb = base.summary.judge, ji = impr.summary.judge;
-  const model = ji?.model ?? jb?.model ?? rubric?.model ?? "judge";
-  return (
-    <div className="grid gap-3 rounded-xl border border-border bg-card p-3">
-      <div className="grid gap-1 text-[12.5px]">
-        <div><span className="font-medium">Model </span><span className="font-mono">{model}</span><span className="text-muted-foreground"> · {rubric?.frozen ?? "fixed model, fixed prompt, JSON output"}</span></div>
-        <div><span className="font-medium">Sees </span><span className="text-muted-foreground">{rubric?.sees ?? "the question, the reference answer, the page excerpts shown to the model, the answer"}</span></div>
-        <div><span className="font-medium">Scale </span><span className="text-muted-foreground">{rubric?.scale ?? "integer 1 to 5 per dimension; overall = mean of the four"}</span></div>
-      </div>
-      <div className="grid gap-1.5 border-t border-border pt-2.5">
-        {DIMS.map((d) => (
-          <div key={d} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 text-[12.5px]"><div className="font-medium capitalize">{d}</div><div className="text-muted-foreground">{rubric?.dimensions?.[d] ?? ""}</div></div>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-[12px] sm:grid-cols-4">
-        {[["Judged answers", `${jb?.n ?? 0} · ${ji?.n ?? 0}`], ["Judge cost, both runs", `$${((jb?.cost_usd ?? 0) + (ji?.cost_usd ?? 0)).toFixed(3)}`], ["Per judgement", `${jb?.ms_mean ?? ji?.ms_mean ?? 0} ms${rubric ? ` · $${rubric.price_per_1m_tokens.input} / $${rubric.price_per_1m_tokens.output} per 1M tokens` : ""}`], ["Agrees with the checks", `${jb?.agreement != null ? pctf(jb.agreement) : "–"} · ${ji?.agreement != null ? pctf(ji.agreement) : "–"}`]].map(([l, v]) => (
-          <div key={l} className="rounded-lg border border-border px-3 py-2"><div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{l}</div><div className="mt-0.5 font-mono text-[12.5px]">{v}</div></div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -271,8 +212,6 @@ export default function AnswerEvalsPage() {
     for (const r of [base, impr]) if (r && !full[r.id]) j<FullRun>(`/api/answer-evals/run?id=${encodeURIComponent(r.id)}`).then((x) => { if (on) setFull((f) => ({ ...f, [x.id]: x })); }).catch(() => {});
     return () => { on = false; };
   }, [base?.id, impr?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const label = (c?: string) => (c && o?.info?.[c]?.label) || c || "";
-  const labels: [string, string] = [label(o?.baseline), label(o?.improvement)];
   const ref = base ?? impr;
   const sample = ref?.summary.sample;
   const sel = which === "baseline" ? base : impr;
@@ -280,7 +219,7 @@ export default function AnswerEvalsPage() {
   const B = base?.summary, I = impr?.summary;
   const dim = (s: Summary | undefined, d: string) => s?.judge?.dims?.[d];
   return (
-    <AppShell title="Evals Pipeline" subtitle={ref ? `${sample?.n ?? ref.summary.n_queries} benchmark queries answered end to end · two eval pipelines: deterministic checks and ${ref.judge_model ?? "LLM"} judge` : o ? "no runs yet" : "loading"}>
+    <AppShell title="Evals Pipeline" subtitle={ref ? `${sample?.n ?? ref.summary.n_queries} benchmark questions · baseline vs reranker` : o ? "no runs yet" : "loading"}>
       <div className="grid gap-6 p-4 sm:p-6">
         {!o ? <MessageLoading /> : !base || !impr || !B || !I ? (
           <div className="grid gap-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -289,41 +228,37 @@ export default function AnswerEvalsPage() {
           </div>
         ) : (
           <>
-            <section className="grid gap-2">
-              <h2 className="text-sm font-medium">Two eval pipelines over the same answers</h2>
-              <p className="max-w-[90ch] text-xs text-muted-foreground">
-                <RoleBadge role="baseline" /> {labels[0]} and <RoleBadge role="improvement" /> {labels[1]} answered the same {sample ? `seeded sample of ${sample.n} benchmark queries (seed ${sample.seed})` : `${ref?.summary.n_queries} benchmark queries`} exactly as the app does: retrieve, read the top {ref?.n_pages} pages, answer with {ref?.answer_model}, cite. Every answer is then graded twice, independently. {impr.hardware} · {when(impr.created_at)}.
-              </p>
-            </section>
+            <p className="max-w-[90ch] text-[13px] text-muted-foreground">
+              The baseline (hybrid search) and the reranker answered the same {sample?.n ?? ref?.summary.n_queries} benchmark questions with {ref?.answer_model}, reading the
+              top {ref?.n_pages} pages. Each answer is graded twice: deterministic checks, and {ref?.judge_model ?? "an LLM"} as judge.
+            </p>
             <section className="grid gap-3">
               <Toggle<Tab> value={tab} onChange={setTab} opts={[["checks", "Deterministic checks"], ["judge", "LLM as judge"]]} />
               {tab === "checks" ? (
-                <>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <DeltaCard label="Pass rate" b={B.pass_rate} i={I.pass_rate} fmt={pctf} better="up" />
-                    <DeltaCard label="Mean score" b={B.mean_score} i={I.mean_score} fmt={f3} better="up" />
-                    <DeltaCard label="Grounded" b={B.checks.grounded?.pass_rate} i={I.checks.grounded?.pass_rate} fmt={pctf} better="up" />
-                    <DeltaCard label="Anchor coverage" b={B.checks.anchors?.mean} i={I.checks.anchors?.mean} fmt={f3} better="up" />
-                  </div>
-                  <ChecksTable base={base} impr={impr} labels={labels} />
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    <Groups title="Question type" base={B.by_query_type} impr={I.by_query_type} labels={labels} />
-                    <Groups title="Question needs" base={B.by_kind} impr={I.by_kind} labels={labels} names={{ table: "a table", figure: "a figure or infographic", text: "running text" }} />
-                    <Groups title="Query format" base={B.by_format} impr={I.by_format} labels={labels} />
-                  </div>
-                </>
+                <ResultsTable showWeight
+                  rows={[
+                    { label: "Pass rate", b: B.pass_rate, i: I.pass_rate, fmt: pctf, strong: true, hint: `Share of answers scoring at least ${base.rubric.threshold}` },
+                    { label: "Mean score", b: B.mean_score, i: I.mean_score, fmt: f3, strong: true, hint: "Weighted mean of the checks below, 0 to 1" },
+                    ...CHECK_ORDER.filter((c) => B.checks[c] || I.checks[c]).map((c) => ({
+                      label: CHECK_LABEL[c] ?? c, hint: base.rubric.descriptions[c], weight: base.rubric.weights[c] != null ? String(base.rubric.weights[c]) : "info",
+                      b: B.checks[c]?.mean, i: I.checks[c]?.mean, fmt: f2,
+                    })),
+                    { label: "Declined answers", b: B.refusals, i: I.refusals, fmt: (v: number) => String(Math.round(v)), lowerIsBetter: true, hint: base.rubric.descriptions.refusal },
+                  ]}
+                  note={`No model in the score: each check compares the answer and its citations with the reference answer and the labelled pages. Pass at ${base.rubric.threshold}. Hover a row for what it tests.`}
+                />
               ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <DeltaCard label="Overall / 5" b={B.judge?.mean_overall} i={I.judge?.mean_overall} fmt={f2} better="up" />
-                    {DIMS.map((d) => <DeltaCard key={d} label={d} b={dim(B, d)} i={dim(I, d)} fmt={f2} better="up" />)}
-                  </div>
-                  <JudgeRubricCard rubric={o.judge_rubric} base={base} impr={impr} />
-                </>
+                <ResultsTable
+                  rows={[
+                    { label: "Overall", b: B.judge?.mean_overall, i: I.judge?.mean_overall, fmt: f2, strong: true, hint: "Mean of the four dimensions" },
+                    ...DIMS.map((d) => ({ label: d[0].toUpperCase() + d.slice(1), hint: o.judge_rubric?.dimensions?.[d], b: dim(B, d), i: dim(I, d), fmt: f2 })),
+                  ]}
+                  note={`${I.judge?.model ?? ref?.judge_model ?? "The judge"} scores each answer 1 to 5 per dimension from the question, the reference and the pages the model saw. A different model family from the answering model, with a fixed prompt.`}
+                />
               )}
               <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-sm font-medium">Every answer against its reference</h2>
-                <Toggle<Role> value={which} onChange={setWhich} opts={[["baseline", labels[0]], ["improvement", labels[1]]]} />
+                <h2 className="text-sm font-medium">Answers</h2>
+                <Toggle<Role> value={which} onChange={setWhich} opts={[["baseline", "Baseline"], ["improvement", "Reranker"]]} />
               </div>
               {selFull ? <Queries key={`${selFull.id}-${tab}`} run={selFull} tab={tab} /> : <MessageLoading />}
             </section>
