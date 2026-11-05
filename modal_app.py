@@ -14,7 +14,8 @@ import modal
 
 APP_NAME = "matt"
 MODELS_DIR, DATA_DIR = "/models", "/data"
-GPU = ["L4", "A10G", "L40S", "A100-40GB"]   # first available wins; all run ColQwen in bf16
+GPU = ["L4", "A10G", "L40S", "A100-40GB"]   # batch jobs: first available wins; all run ColQwen in bf16
+WEB_GPU = "L4"           # the query API is pinned to L4: predictable cost (~$0.88/h warm); waits for an L4 rather than falling back
 KEEP_WARM = 0            # 1 keeps one L4 container resident (no cold start, ~$0.80/h); 0 scales to zero after `scaledown_window`
 
 models_vol = modal.Volume.from_name("matt-models", create_if_missing=True)
@@ -129,7 +130,7 @@ def answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: int = 
     run_answer_evals.remote(config=config, limit=limit, sample=sample, seed=seed, workers=workers, judge=judge, judge_run=judge_run)
 
 
-@app.cls(gpu=GPU, volumes={MODELS_DIR: models_vol, DATA_DIR: data_vol}, secrets=secrets, scaledown_window=600, timeout=900, min_containers=KEEP_WARM)
+@app.cls(gpu=WEB_GPU, volumes={MODELS_DIR: models_vol, DATA_DIR: data_vol}, secrets=secrets, scaledown_window=600, timeout=900, min_containers=KEEP_WARM)
 @modal.concurrent(max_inputs=8)
 class Web:
     @modal.enter()
@@ -155,3 +156,33 @@ class Web:
         from server.app import app as fastapi_app
 
         return fastapi_app
+
+
+# Demo warm window: one Web container stays warm (no cold start) inside these windows, US Central time, and the app
+# scales to zero outside them. Checked every 15 minutes; once the last window ends nothing stays warm.
+# Cost while warm: about $0.88/h (Web is pinned to an L4; GPU + CPU + memory), ~$17 for the two windows below.
+WARM_TZ = "America/Chicago"
+WARM_WINDOWS = [
+    ("2026-11-05 09:00", "2026-11-05 19:00"),
+    ("2026-11-06 09:00", "2026-11-06 18:00"),
+]
+
+
+def warm_target(now) -> int:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(WARM_TZ)
+    inside = any(datetime.fromisoformat(a).replace(tzinfo=tz) <= now < datetime.fromisoformat(b).replace(tzinfo=tz)
+                 for a, b in WARM_WINDOWS)
+    return 1 if inside else KEEP_WARM
+
+
+@app.function(image=modal.Image.debian_slim(python_version="3.12"), schedule=modal.Cron("*/15 * * * *", timezone=WARM_TZ), timeout=120)
+def warm_window() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    target = warm_target(datetime.now(ZoneInfo(WARM_TZ)))
+    modal.Cls.from_name(APP_NAME, "Web")().update_autoscaler(min_containers=target)
+    print(f"Web min_containers -> {target}", flush=True)
