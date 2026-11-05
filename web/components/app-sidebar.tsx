@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { FLAGS } from "@/lib/flags";
 import { Activity, BarChart3, ClipboardCheck, Database, FileSearch, FlaskConical, GitCompare, Settings } from "lucide-react";
 import {
   Sidebar,
@@ -31,8 +32,8 @@ const NAV = [
   {
     label: "Quality",
     items: [
-      { href: "/evals", title: "Retrieval Evals", icon: BarChart3, badge: null as string | null },
-      { href: "/answer-evals", title: "Answer Evals", icon: ClipboardCheck, badge: null as string | null },
+      ...(FLAGS.retrievalEvals ? [{ href: "/evals", title: "Retrieval Evals", icon: BarChart3, badge: null as string | null }] : []),
+      { href: "/answer-evals", title: "Evals Pipeline", icon: ClipboardCheck, badge: null as string | null },
       { href: "/evidence", title: "Evidence", icon: FileSearch, badge: null as string | null },
       { href: "/observability", title: "Observability", icon: Activity, badge: null as string | null },
     ],

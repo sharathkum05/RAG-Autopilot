@@ -280,7 +280,7 @@ export default function AnswerEvalsPage() {
   const B = base?.summary, I = impr?.summary;
   const dim = (s: Summary | undefined, d: string) => s?.judge?.dims?.[d];
   return (
-    <AppShell title="Answer Evals" subtitle={ref ? `${sample?.n ?? ref.summary.n_queries} benchmark queries answered end to end · two eval pipelines: deterministic checks and ${ref.judge_model ?? "LLM"} judge` : o ? "no runs yet" : "loading"}>
+    <AppShell title="Evals Pipeline" subtitle={ref ? `${sample?.n ?? ref.summary.n_queries} benchmark queries answered end to end · two eval pipelines: deterministic checks and ${ref.judge_model ?? "LLM"} judge` : o ? "no runs yet" : "loading"}>
       <div className="grid gap-6 p-4 sm:p-6">
         {!o ? <MessageLoading /> : !base || !impr || !B || !I ? (
           <div className="grid gap-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">

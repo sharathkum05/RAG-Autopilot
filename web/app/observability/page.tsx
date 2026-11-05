@@ -23,7 +23,7 @@ interface Sample { t: string; cpu: number; ram_gb: number; gpu_util: number; gpu
 interface System { source: string; sampled_at: string; container: { id: string; gpu: string; region: string; cloud?: string; uptime_s: number; started_at?: string; model_load_s?: number | null; cold_starts_today: number; state: string; scale_to_zero_after_s: number }; cpu: { percent: number; cores: number }; memory: { used_gb: number; total_gb: number }; gpu: { name?: string; util_percent: number; memory_used_gb: number; memory_total_gb: number; temperature_c: number }; models_loaded: { name: string; memory_gb: number | null }[]; requests: { last_hour: number; p50_ms: number; p95_ms: number; errors: number }; history?: Sample[] }
 
 const WINDOWS: [string, string][] = [["24h", "24 h"], ["7d", "7 days"], ["30d", "30 days"], ["all", "all"]];
-const SOURCE_LABEL: Record<string, string> = { playground: "Playground", dataset: "Dataset", compare: "Pipeline compare", answer_eval: "Answer evals", chat: "Chat" };
+const SOURCE_LABEL: Record<string, string> = { playground: "Playground", dataset: "Dataset", compare: "Pipeline compare", answer_eval: "Evals pipeline", chat: "Chat" };
 const STAGE_TONE: Record<string, string> = { "Encoding question": "bg-muted-foreground/70", "Visual search": "bg-evidence", "Text search": "bg-foreground/70", Fusing: "bg-warning", Reranking: "bg-warning", Answering: "bg-success" };
 const s1 = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const when = (iso: string) => iso.replace("T", " ").slice(5, 16);

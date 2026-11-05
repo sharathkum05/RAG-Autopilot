@@ -160,11 +160,11 @@ class Web:
 
 # Demo warm window: one Web container stays warm (no cold start) inside these windows, US Central time, and the app
 # scales to zero outside them. Checked every 15 minutes; once the last window ends nothing stays warm.
-# Cost while warm: about $0.88/h on an L4 or $1.18/h on the A10G fallback (GPU + CPU + memory): ~$17 to $22 for the two windows below.
+# Cost while warm: about $0.88/h on an L4 or $1.12/h on the A10G fallback (GPU + CPU + memory). The handover window
+# below runs straight through the night: about $25 (L4) to $33 (A10G) from Nov 5 morning to Nov 6, 7 pm.
 WARM_TZ = "America/Chicago"
 WARM_WINDOWS = [
-    ("2026-11-05 09:00", "2026-11-05 19:00"),
-    ("2026-11-06 09:00", "2026-11-06 18:00"),
+    ("2026-11-05 09:00", "2026-11-06 19:00"),
 ]
 
 
