@@ -222,7 +222,11 @@ def chat(body: ChatIn, x_anthropic_key: str | None = Header(default=None)):
         finally:
             flush()
 
-    return StreamingResponse(gen(), media_type="application/x-ndjson")
+    # Modal's proxy compresses (zstd/gzip) any response a browser accepts compressed, and buffers the whole stream to do
+    # it, so the steps and the typed answer all landed at once at the end. Event streams and already-encoded responses
+    # are passed through, so the NDJSON body is sent under the event-stream type with an explicit identity encoding.
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache, no-transform", "Content-Encoding": "identity", "X-Accel-Buffering": "no"})
 
 
 # ---------------------------------------------------------------------------- index + explain

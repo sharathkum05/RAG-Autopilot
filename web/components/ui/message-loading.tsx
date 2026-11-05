@@ -1,47 +1,12 @@
+// Three bouncing dots. Plain CSS (Tailwind's animate-bounce with staggered delays) rather than chained SVG <animate>
+// ids: those ids are global to the page, so a second loader on screen broke the chain and froze the dots.
 function MessageLoading() {
   return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-      className="text-foreground"
-      aria-label="Thinking"
-      role="img"
-    >
-      <circle cx="4" cy="12" r="2" fill="currentColor">
-        <animate
-          id="spinner_qFRN"
-          begin="0;spinner_OcgL.end+0.25s"
-          attributeName="cy"
-          calcMode="spline"
-          dur="0.6s"
-          values="12;6;12"
-          keySplines=".33,.66,.66,1;.33,0,.66,.33"
-        />
-      </circle>
-      <circle cx="12" cy="12" r="2" fill="currentColor">
-        <animate
-          begin="spinner_qFRN.begin+0.1s"
-          attributeName="cy"
-          calcMode="spline"
-          dur="0.6s"
-          values="12;6;12"
-          keySplines=".33,.66,.66,1;.33,0,.66,.33"
-        />
-      </circle>
-      <circle cx="20" cy="12" r="2" fill="currentColor">
-        <animate
-          id="spinner_OcgL"
-          begin="spinner_qFRN.begin+0.2s"
-          attributeName="cy"
-          calcMode="spline"
-          dur="0.6s"
-          values="12;6;12"
-          keySplines=".33,.66,.66,1;.33,0,.66,.33"
-        />
-      </circle>
-    </svg>
+    <span className="inline-flex h-6 items-center gap-1 text-foreground" aria-label="Thinking" role="img">
+      {[0, 150, 300].map((delay) => (
+        <span key={delay} className="size-1.5 animate-bounce rounded-full bg-current" style={{ animationDelay: `${delay}ms`, animationDuration: "900ms" }} />
+      ))}
+    </span>
   );
 }
 
