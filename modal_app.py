@@ -93,7 +93,7 @@ def run_evals(configs: str = "", limit: int = 0, k: int = 10) -> None:
 
 
 @app.function(gpu=GPU, volumes={MODELS_DIR: models_vol, DATA_DIR: data_vol}, secrets=secrets, timeout=2 * 3600)
-def run_answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: int = 42, workers: int = 4, judge: bool = True, judge_run: str = "") -> None:
+def run_answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: int = 42, workers: int = 4, judge: bool = True, judge_run: str = "", n_pages: int = 0) -> None:
     """Answer evals for one config: retrieval + Claude answers + deterministic checks (+ OpenAI judge when the key is set).
     With `judge_run`, only adds judge scores to that stored run (no GPU work, cents)."""
     import sys
@@ -105,7 +105,7 @@ def run_answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: in
         sys.argv = ["run_answer_evals", "--judge-run", judge_run, "--workers", str(workers)]
     else:
         sys.argv = ["run_answer_evals", f"{DATA_DIR}/python_textbook", "--workers", str(workers), "--hardware", f"Modal {gpu}"] \
-            + (["--config", config] if config else []) + (["--limit", str(limit)] if limit else []) + (["--sample", str(sample), "--seed", str(seed)] if sample else []) + ([] if judge else ["--no-judge"])
+            + (["--config", config] if config else []) + (["--limit", str(limit)] if limit else []) + (["--sample", str(sample), "--seed", str(seed)] if sample else []) + ([] if judge else ["--no-judge"]) + (["--n-pages", str(n_pages)] if n_pages else [])
     from scripts.run_answer_evals import main
 
     main()
@@ -124,10 +124,10 @@ def evals(configs: str = "", limit: int = 0, k: int = 10) -> None:
 
 
 @app.local_entrypoint()
-def answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: int = 42, workers: int = 4, judge: bool = True, judge_run: str = "") -> None:
+def answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: int = 42, workers: int = 4, judge: bool = True, judge_run: str = "", n_pages: int = 0) -> None:
     """`modal run modal_app.py::answer_evals --config text_hybrid_rerank --sample 30` answers the sampled benchmark queries and scores the answers;
     `--judge-run <id>` later adds the OpenAI judge to a stored run for cents."""
-    run_answer_evals.remote(config=config, limit=limit, sample=sample, seed=seed, workers=workers, judge=judge, judge_run=judge_run)
+    run_answer_evals.remote(config=config, limit=limit, sample=sample, seed=seed, workers=workers, judge=judge, judge_run=judge_run, n_pages=n_pages)
 
 
 @app.cls(gpu=WEB_GPU, volumes={MODELS_DIR: models_vol, DATA_DIR: data_vol}, secrets=secrets, scaledown_window=600, timeout=900, min_containers=KEEP_WARM)
