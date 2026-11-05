@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AppShell } from "@/components/app-shell";
 import { MessageLoading } from "@/components/ui/message-loading";
@@ -20,12 +19,7 @@ interface PerQuery { query_id: number; query: string; answer: string; content_ty
 interface Summary { configs: string[]; latest: RunRow[]; runs: RunRow[]; baseline: string; improvement: string; info?: Record<string, { label: string; detail: string }> }
 
 const LABEL: Record<string, string> = { bm25: "BM25 only", text_hybrid: "Hybrid RAG without reranker", text_hybrid_rerank: "Hybrid RAG with reranker", visual: "Visual only (ColQwen)", fused: "Fused (visual + text)", fused_rerank: "Fused + rerank" };
-const WHAT: Record<string, string> = {
-  bm25: "sparse exact-term match over chunks", text_hybrid: "bge-m3 dense + BM25, RRF inside Qdrant", text_hybrid_rerank: "text-hybrid top 20 re-scored by bge-reranker-v2-m3", visual: "ColQwen2.5 MaxSim over page images",
-  fused: "RRF of the visual and text lists", fused_rerank: "fused top 20 re-scored by bge-reranker-v2-m3",
-};
 const pctf = (v: number) => `${(v * 100).toFixed(1)}%`;
-const when = (iso: string) => iso.replace("T", " ").slice(0, 16);
 const delta = (v: number, base: number) => { const d = (v - base) * 100; return d === 0 ? "" : `${d > 0 ? "+" : ""}${d.toFixed(1)}`; };
 
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
@@ -36,7 +30,6 @@ function Td({ children, right, mono, className }: { children: React.ReactNode; r
 }
 
 const label = (s: Summary, c: string) => s.info?.[c]?.label ?? LABEL[c] ?? c;
-const what = (s: Summary, c: string) => s.info?.[c]?.detail ?? WHAT[c] ?? "";
 const kind = (ct: string[]) => (ct.includes("Table") ? "Table" : ct.includes("Infographic") || ct.includes("Image") ? "Figure" : "Text");
 
 function Stat({ label, before, after, fmt, lowerIsBetter }: { label: string; before: number; after: number; fmt: (v: number) => string; lowerIsBetter?: boolean }) {
@@ -110,40 +103,6 @@ function Deltas({ s }: { s: Summary }) {
           </div>
         </div>
       ) : <MessageLoading />}
-    </div>
-  );
-}
-
-function Comparison({ s }: { s: Summary }) {
-  const base = s.latest.find((r) => r.config === s.baseline)?.metrics;
-  return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-full text-[13px]">
-        <thead className="border-b border-border">
-          <tr><Th>Retrieval config</Th><Th right>nDCG@5</Th><Th right>Δ vs baseline</Th><Th right>Recall@5</Th><Th right>MRR@10</Th><Th right>hit@5</Th><Th right>mean</Th><Th right>p95</Th><Th>hardware</Th></tr>
-        </thead>
-        <tbody>
-          {s.latest.map((r) => {
-            const m = r.metrics, role = r.config === s.baseline ? "baseline" : r.config === s.improvement ? "improvement" : null;
-            return (
-              <tr key={r.id} className={cn("border-b border-border last:border-b-0", role === "improvement" && "bg-success/5")}>
-                <Td>
-                  <div className="flex items-center gap-2"><span className="font-medium">{label(s, r.config)}</span>{role ? <Badge variant="outline" className="font-mono text-[10px]">{role}</Badge> : null}</div>
-                  <div className="text-xs text-muted-foreground">{what(s, r.config)}</div>
-                </Td>
-                <Td right mono className="font-medium text-foreground">{pctf(m["ndcg@5"])}</Td>
-                <Td right mono className={cn(base && m["ndcg@5"] > base["ndcg@5"] ? "text-success" : base && m["ndcg@5"] < base["ndcg@5"] ? "text-destructive" : "text-muted-foreground")}>{base ? delta(m["ndcg@5"], base["ndcg@5"]) : ""}</Td>
-                <Td right mono>{pctf(m["recall@5"])}</Td>
-                <Td right mono>{pctf(m["mrr@10"])}</Td>
-                <Td right mono>{pctf(m["hit@5"])}</Td>
-                <Td right mono>{m.latency_ms.total.mean} ms</Td>
-                <Td right mono>{m.latency_ms.total.p95} ms</Td>
-                <Td className="text-xs text-muted-foreground">{r.hardware} · {when(r.created_at)}</Td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -244,13 +203,8 @@ export default function EvalsPage() {
           <>
             <section className="grid gap-2">
               <h2 className="text-sm font-medium">Baseline → improvement</h2>
-              <p className="max-w-[80ch] text-xs text-muted-foreground">{label(s, s.baseline)} is the standard text RAG; {label(s, s.improvement)} adds the ColQwen page-image list before fusion. Same queries, same labels, same index.</p>
+              <p className="max-w-[80ch] text-xs text-muted-foreground">{label(s, s.baseline)} is the standard text RAG; {label(s, s.improvement)} adds a cross-encoder reranker over the top 20 pages. Same queries, same labels, same index.</p>
               <Deltas s={s} />
-            </section>
-            <section className="grid gap-2">
-              <h2 className="text-sm font-medium">Retrieval quality by config</h2>
-              <p className="max-w-[80ch] text-xs text-muted-foreground">Each query has one or more labelled evidence pages (grade 1 or 2). nDCG@5 rewards ranking the graded pages early, Recall@5 is the share of labelled pages found in the top 5, MRR@10 is the reciprocal rank of the first labelled page, hit@5 is the share of queries with any labelled page in the top 5. Latency is retrieval only, measured on the listed hardware.</p>
-              <Comparison s={s} />
             </section>
             <section className="grid gap-2">
               <h2 className="text-sm font-medium">Latency per stage (mean, ms)</h2>

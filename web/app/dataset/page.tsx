@@ -18,7 +18,7 @@ const WELCOME: ChatMessage = {
   id: "welcome",
   role: "assistant",
   text:
-    "This workspace is preloaded with Introduction to Python Programming, a 415-page open textbook from the ViDoRe V3 computer-science set, already parsed, chunked and indexed as text chunks and page images. Ask anything from it; every answer cites the chunk and page it came from.",
+    "This workspace is preloaded with Introduction to Python Programming, a 415-page open textbook from the ViDoRe V3 computer-science set, already parsed, chunked and indexed as text chunks and page images. Ask anything from it; every answer cites the chunk and page it came from. Runs on baseline model.",
 };
 
 export default function DatasetPage() {
