@@ -62,13 +62,14 @@ interface EvidencePanelProps {
 /** "Answered from" dropdown under an assistant message: the chunks, pages, highlighted regions and scores. */
 export function EvidencePanel({ messageId, chunks, open, onOpenChange, activeIndex }: EvidencePanelProps) {
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange} className="rounded-xl border border-border bg-card">
+    <Collapsible open={open} onOpenChange={onOpenChange} className="min-w-0 rounded-xl border border-border bg-card">
       <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] text-muted-foreground hover:text-foreground">
         <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[panel-open]:rotate-90" />
         <span className="min-w-0 flex-1 truncate">
           <b className="font-medium text-foreground">Answered from</b>{" "}
-          {chunks.map((c, i) => `[${i + 1}] ${c.doc} p.${c.pno}`).join(" · ")}
+          {chunks.slice(0, 2).map((c, i) => `[${i + 1}] ${c.doc} p.${c.pno}`).join(" · ")}
         </span>
+        {chunks.length > 2 ? <span className="shrink-0 rounded-full border border-border px-2 py-0.5 font-mono text-[11px]">+{chunks.length - 2} more</span> : null}
         <span className="hidden shrink-0 font-mono text-[11px] sm:inline">chunks and scores</span>
       </CollapsibleTrigger>
       <CollapsibleContent>

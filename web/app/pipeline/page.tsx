@@ -132,7 +132,7 @@ function TurnView({ turn, info }: { turn: Turn; info: Record<string, Info> }) {
         </div>
         <div className="rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-2.5 text-[15px] leading-7">{turn.question}</div>
       </div>
-      <div className={cn("grid gap-3", turn.columns.length > 1 && "lg:grid-cols-2")}>
+      <div className={cn("grid grid-cols-[minmax(0,1fr)] gap-3", turn.columns.length > 1 && "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
         {turn.columns.map((c) => <ColumnView key={c.config} col={c} info={info[c.config]} relevant={relevant} messageId={`${turn.id}-${c.config}`} />)}
       </div>
       {turn.bench ? <div className="rounded-lg border border-dashed border-border px-3.5 py-2 text-[12.5px] text-muted-foreground"><span className="font-medium text-foreground">Reference answer </span>{turn.bench.answer}</div> : null}

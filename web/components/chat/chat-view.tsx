@@ -58,7 +58,7 @@ function AssistantMessage({ msg, conversationId, onAsk }: { msg: ChatMessage; co
     setTimeout(() => setActive(null), 1600);
   };
   return (
-    <div className="grid gap-2.5">
+    <div className="grid min-w-0 gap-2.5">
       <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
         <span className="flex size-5 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">M</span>
         <span>Matt</span>
@@ -139,7 +139,7 @@ export function ChatView({ source, conversationId, welcome, suggestions, actions
   return (
     <div className="flex h-[calc(100svh-3.5rem)] min-h-0 flex-col">
       <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto grid w-full max-w-3xl gap-7 px-4 py-8">
+        <div className="mx-auto grid w-full max-w-3xl grid-cols-[minmax(0,1fr)] gap-7 px-4 py-8">
           {header}
           {messages.map((m) =>
             m.role === "user" ? (

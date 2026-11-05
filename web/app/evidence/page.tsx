@@ -232,7 +232,7 @@ function TurnRow({ t, onExplain, role }: { t: Turn; onExplain: (q: string) => vo
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="grid gap-3 border-t border-border px-3.5 pb-3.5 pt-3">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 border-t border-border px-3.5 pb-3.5 pt-3">
           <div className="flex flex-wrap gap-1.5">
             {stages.map(([k, v]) => <Stat key={k} label={k} value={fmtMs(v)} sub={ttr ? `${Math.round((v / ttr) * 100)}%` : undefined} />)}
           </div>
@@ -262,7 +262,7 @@ function CompareRow({ base, impr, onExplain }: { base: Turn; impr: Turn; onExpla
         <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{base.question}</span>
         <span className="font-mono text-[11px] text-muted-foreground">{when(base.created_at)}</span>
       </div>
-      <div className="grid gap-2 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <TurnRow t={base} onExplain={onExplain} role="baseline" />
         <TurnRow t={impr} onExplain={onExplain} role="improvement" />
       </div>
