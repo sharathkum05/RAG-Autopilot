@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
+    ntfy_topic: str = ""            # phone alerts on visits, questions and uploads (pipeline/notify.py); off when empty
     hf_token: str = ""                # optional: faster, rate-limit-free model downloads; required only for gated models
     openai_api_key: str = ""          # optional: the frozen answer-eval judge (second opinion next to the deterministic checks)
     judge_model: str = "gpt-5-mini"

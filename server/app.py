@@ -106,6 +106,9 @@ async def ingest(files: list[UploadFile] = File(...), workspace: str | None = Fo
     payload = [(f.filename or "upload", await f.read()) for f in files]
     sb_upsert("conversations", {"id": ws, "source": "playground", "workspace": ws, "mode": PLAYGROUND_DEFAULT, "answer_model": settings().answer_model})
     threading.Thread(target=run_ingest, args=(job_id, ws, payload), daemon=True).start()
+    from pipeline.notify import notify
+
+    notify("File uploaded in Playground", ", ".join(name for name, _ in payload)[:200], tags="page_facing_up")
     return {"jobId": job_id, "workspace": ws}
 
 
@@ -210,6 +213,11 @@ def chat(body: ChatIn, x_anthropic_key: str | None = Header(default=None)):
             yield ndjson({"type": "evidence", "meta": meta})
             yield ndjson({"type": "done"})
             log.info("turn %s %s/%s retrieval %d ms answer %d ms ttr %d ms $%.3f %s", body.conversationId, body.source, config, retrieval_ms, final.ttr_ms, ttr_ms, final.cost_usd, body.question[:80].replace("\n", " "))
+            if not body.conversationId.endswith("_impr"):
+                from pipeline.notify import notify
+
+                tab = {"dataset": "Dataset", "compare": "ViDoRe Pipeline", "playground": "Playground"}.get(body.source, body.source)
+                notify(f"Question on {tab}", f"{body.question[:180]}\n{confidence} confidence, {ttr_ms / 1000:.1f} s, ${final.cost_usd:.3f}", tags="speech_balloon")
             end(trace, output={"answer": final.text[:2000], "confidence": confidence, "cited_pages": [f"{e.doc_name} p.{e.page_no}" for e in cited_ev]},
                 metadata={"timings_ms": result.timings_ms, "ttr_ms": ttr_ms, "cost_usd": final.cost_usd})
             try:
@@ -626,6 +634,9 @@ def secrets_test(body: TestIn):
 
 @app.get("/api/system")
 def system():
+    from pipeline.notify import visit
+
+    visit()
     vm = psutil.virtual_memory()
     gpu = _gpu_sample()
     recent = [r for r in _reqs if r[0] > time.time() - 3600]

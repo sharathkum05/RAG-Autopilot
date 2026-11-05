@@ -130,7 +130,7 @@ def answer_evals(config: str = "", limit: int = 0, sample: int = 0, seed: int = 
     run_answer_evals.remote(config=config, limit=limit, sample=sample, seed=seed, workers=workers, judge=judge, judge_run=judge_run, n_pages=n_pages)
 
 
-@app.cls(gpu=WEB_GPU, volumes={MODELS_DIR: models_vol, DATA_DIR: data_vol}, secrets=secrets, scaledown_window=600, timeout=900, min_containers=KEEP_WARM)
+@app.cls(gpu=WEB_GPU, volumes={MODELS_DIR: models_vol, DATA_DIR: data_vol}, secrets=secrets + [modal.Secret.from_name("matt-notify")], scaledown_window=600, timeout=900, min_containers=KEEP_WARM)
 @modal.concurrent(max_inputs=8)
 class Web:
     @modal.enter()
