@@ -1,0 +1,27 @@
+# secrets
+.env
+.env.local
+web/.env.local
+
+# python
+.venv/
+__pycache__/
+*.py[oc]
+
+# raw datasets (multi-GB, rebuilt by scripts/download_vidore_*.py)
+raw dataset v2/
+raw dataset v3/
+
+# docs, diagrams and slides (not part of the code)
+docs/
+
+# web build output and deps
+web/node_modules/
+web/.next/
+web/.vercel/
+web/*.tsbuildinfo
+.vercel/
+
+# os / editor
+.DS_Store
+~$*
