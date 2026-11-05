@@ -543,7 +543,7 @@ def secrets():
             "openai": ("OpenAI", "answer-eval judge (optional second opinion next to the deterministic checks)")}
     stored = "backend .env (writable)" if env_writable() else "Modal secret (read-only here)"
     return {"writable": env_writable(),
-            "services": [{"id": k, "name": meta[k][0], "purpose": meta[k][1], "stored": stored, "editable": True,
+            "services": [{"id": k, "name": meta[k][0], "purpose": meta[k][1], "stored": stored, "editable": env_writable(),
                           "keys": [{"name": e, "set": bool(_env(e)), "masked": ("•" * 8 + _env(e)[-4:]) if _env(e) else None} for e in envs]} for k, envs in SERVICES.items()]}
 
 
@@ -556,6 +556,8 @@ class SecretsIn(BaseModel):
 def secrets_save(body: SecretsIn):
     """Apply new keys at runtime (and write .env when running locally), then test the service with them."""
     from pipeline.secrets_store import SERVICES as SVC, apply, env_writable
+    if not env_writable():   # hosted (Modal): no login on this API, so keys can't be changed from the outside
+        raise HTTPException(403, "Keys are read-only on the hosted backend; change them in the Modal secret and redeploy.")
     if body.service not in SVC:
         raise HTTPException(400, "unknown service")
     try:
