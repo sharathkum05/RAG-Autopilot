@@ -2,6 +2,9 @@ import type { ChatEvent, IngestStatus, Source } from "@/lib/types";
 
 /** Base URL of the query API. Empty means the Next.js mock routes under /api. */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+/** Chat streams straight from the backend when set: Vercel's function layer held the whole streamed answer until it
+ * finished, so the chat sat on "..." for the full answer time. Everything else still goes through BASE. */
+const STREAM_BASE = process.env.NEXT_PUBLIC_STREAM_URL || BASE;
 
 export async function startIngest(files: File[]): Promise<{ jobId: string }> {
   const form = new FormData();
@@ -26,7 +29,7 @@ export interface ChatRequest {
 
 /** Streams newline-delimited JSON events from the chat endpoint. Resolves when the stream ends. */
 export async function streamChat(req: ChatRequest, onEvent: (e: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(`${BASE}/api/chat`, {
+  const res = await fetch(`${STREAM_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
