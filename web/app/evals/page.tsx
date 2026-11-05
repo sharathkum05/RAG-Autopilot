@@ -19,8 +19,6 @@ interface PerQuery { query_id: number; query: string; answer: string; content_ty
 interface Summary { configs: string[]; latest: RunRow[]; runs: RunRow[]; baseline: string; improvement: string; info?: Record<string, { label: string; detail: string }> }
 
 const LABEL: Record<string, string> = { bm25: "BM25 only", text_hybrid: "Hybrid RAG without reranker", text_hybrid_rerank: "Hybrid RAG with reranker", visual: "Visual only (ColQwen)", fused: "Fused (visual + text)", fused_rerank: "Fused + rerank" };
-const pctf = (v: number) => `${(v * 100).toFixed(1)}%`;
-const delta = (v: number, base: number) => { const d = (v - base) * 100; return d === 0 ? "" : `${d > 0 ? "+" : ""}${d.toFixed(1)}`; };
 
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
   return <th className={cn("px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground", right ? "text-right" : "text-left")}>{children}</th>;
@@ -30,82 +28,6 @@ function Td({ children, right, mono, className }: { children: React.ReactNode; r
 }
 
 const label = (s: Summary, c: string) => s.info?.[c]?.label ?? LABEL[c] ?? c;
-const kind = (ct: string[]) => (ct.includes("Table") ? "Table" : ct.includes("Infographic") || ct.includes("Image") ? "Figure" : "Text");
-
-function Stat({ label, before, after, fmt, lowerIsBetter }: { label: string; before: number; after: number; fmt: (v: number) => string; lowerIsBetter?: boolean }) {
-  const d = after - before, good = lowerIsBetter ? d < 0 : d > 0;
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-      <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[13px]"><span className="text-muted-foreground">{fmt(before)}</span><span className="text-muted-foreground">→</span><span className="text-[15px] font-medium">{fmt(after)}</span>
-        {d !== 0 ? <span className={cn("text-[11px]", good ? "text-success" : "text-destructive")}>{d > 0 ? "+" : ""}{fmt(d)}</span> : null}</div>
-    </div>
-  );
-}
-
-/** Baseline → improvement: headline deltas, per-query wins and losses, and where the gain lands by content type. */
-function Deltas({ s }: { s: Summary }) {
-  const base = s.latest.find((r) => r.config === s.baseline), impr = s.latest.find((r) => r.config === s.improvement);
-  const [pq, setPq] = useState<{ base: PerQuery[]; impr: PerQuery[] } | null>(null);
-  const baseId = base?.id, imprId = impr?.id;
-  useEffect(() => {
-    if (!baseId || !imprId) return;
-    let on = true;
-    Promise.all([j<RunRow & { per_query: PerQuery[] }>(`/api/evals/run?id=${encodeURIComponent(baseId)}`), j<RunRow & { per_query: PerQuery[] }>(`/api/evals/run?id=${encodeURIComponent(imprId)}`)])
-      .then(([b, i]) => { if (on) setPq({ base: b.per_query ?? [], impr: i.per_query ?? [] }); }).catch(() => {});
-    return () => { on = false; };
-  }, [baseId, imprId]);
-  if (!base || !impr) return null;
-  const mb = base.metrics, mi = impr.metrics;
-  let wins = 0, ties = 0, losses = 0;
-  const byKind: Record<string, { n: number; bHit: number; iHit: number; bRR: number; iRR: number }> = {};
-  if (pq) {
-    const bm = new Map(pq.base.map((q) => [q.query_id, q]));
-    for (const qi of pq.impr) {
-      const qb = bm.get(qi.query_id);
-      if (!qb) continue;
-      const rb = qb.first_relevant_rank ?? 99, ri = qi.first_relevant_rank ?? 99;
-      if (ri < rb) wins++; else if (ri > rb) losses++; else ties++;
-      const g = (byKind[kind(qi.content_type)] ??= { n: 0, bHit: 0, iHit: 0, bRR: 0, iRR: 0 });
-      g.n++; g.bHit += qb["hit@5"] ? 1 : 0; g.iHit += qi["hit@5"] ? 1 : 0;
-      g.bRR += qb.first_relevant_rank ? 1 / qb.first_relevant_rank : 0; g.iRR += qi.first_relevant_rank ? 1 / qi.first_relevant_rank : 0;
-    }
-  }
-  const ms = (v: number) => `${Math.round(v)} ms`;
-  return (
-    <div className="grid gap-3">
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Stat label="nDCG@5" before={mb["ndcg@5"]} after={mi["ndcg@5"]} fmt={pctf} />
-        <Stat label="Recall@5" before={mb["recall@5"]} after={mi["recall@5"]} fmt={pctf} />
-        <Stat label="MRR@10" before={mb["mrr@10"]} after={mi["mrr@10"]} fmt={pctf} />
-        <Stat label="retrieval p50" before={mb.latency_ms.total.p50} after={mi.latency_ms.total.p50} fmt={ms} lowerIsBetter />
-      </div>
-      {pq ? (
-        <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)]">
-          <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px]">
-            <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Per query, first labelled page</div>
-            <div className="mt-1 flex flex-wrap gap-x-4 font-mono"><span className="text-success">{wins} better</span><span className="text-muted-foreground">{ties} same</span><span className="text-destructive">{losses} worse</span></div>
-            <div className="mt-1 text-xs text-muted-foreground">{label(s, s.improvement)} vs {label(s, s.baseline)}, rank of the first labelled page in the top 10</div>
-          </div>
-          <div className="overflow-x-auto rounded-lg border border-border bg-card">
-            <table className="w-full text-[13px]">
-              <thead className="border-b border-border"><tr><Th>Question needs</Th><Th right>queries</Th><Th right>hit@5 base → impr</Th><Th right>MRR base → impr</Th></tr></thead>
-              <tbody>
-                {(["Table", "Figure", "Text"] as const).filter((k) => byKind[k]).map((k) => { const g = byKind[k]; const dh = (g.iHit - g.bHit) / g.n, dr = (g.iRR - g.bRR) / g.n; return (
-                  <tr key={k} className="border-b border-border last:border-b-0">
-                    <Td className="font-medium">{k === "Table" ? "a table" : k === "Figure" ? "a figure or infographic" : "running text"}</Td>
-                    <Td right mono>{g.n}</Td>
-                    <Td right mono>{pctf(g.bHit / g.n)} → {pctf(g.iHit / g.n)} <span className={cn(dh > 0 ? "text-success" : dh < 0 ? "text-destructive" : "text-muted-foreground")}>{delta(g.iHit / g.n, g.bHit / g.n) || "±0"}</span></Td>
-                    <Td right mono>{pctf(g.bRR / g.n)} → {pctf(g.iRR / g.n)} <span className={cn(dr > 0 ? "text-success" : dr < 0 ? "text-destructive" : "text-muted-foreground")}>{delta(g.iRR / g.n, g.bRR / g.n) || "±0"}</span></Td>
-                  </tr>); })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : <MessageLoading />}
-    </div>
-  );
-}
 
 function Latency({ s }: { s: Summary }) {
   const stages = Array.from(new Set(s.latest.flatMap((r) => Object.keys(r.metrics.latency_ms).filter((k) => k !== "total"))));
@@ -201,11 +123,6 @@ export default function EvalsPage() {
           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">No eval runs yet. Run <code className="font-mono">modal run modal_app.py::evals</code> to score every retrieval config on the textbook queries.</div>
         ) : (
           <>
-            <section className="grid gap-2">
-              <h2 className="text-sm font-medium">Baseline → improvement</h2>
-              <p className="max-w-[80ch] text-xs text-muted-foreground">{label(s, s.baseline)} is the standard text RAG; {label(s, s.improvement)} adds a cross-encoder reranker over the top 20 pages. Same queries, same labels, same index.</p>
-              <Deltas s={s} />
-            </section>
             <section className="grid gap-2">
               <h2 className="text-sm font-medium">Latency per stage (mean, ms)</h2>
               <Latency s={s} />
