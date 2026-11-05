@@ -92,7 +92,7 @@ export function EvidencePanel({ messageId, chunks, open, onOpenChange, activeInd
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {c.scores.visualRank != null && <Score label="visual" value={`#${c.scores.visualRank} · ${c.scores.visualScore?.toFixed(1)}`} />}
                   {c.scores.textRank != null && <Score label="text" value={`#${c.scores.textRank} · ${c.scores.textScore?.toFixed(2)}`} />}
-                  {c.scores.fusedRank != null && <Score label="fused" value={`#${c.scores.fusedRank}`} />}
+                  {c.scores.fusedRank != null && <Score label="rank" value={`#${c.scores.fusedRank}`} />}
                   {c.scores.rerank != null && <Score label="rerank" value={c.scores.rerank.toFixed(2)} />}
                 </div>
                 <p className="mt-2 max-w-[70ch] text-[13px] leading-relaxed text-foreground">

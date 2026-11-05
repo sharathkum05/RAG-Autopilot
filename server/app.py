@@ -214,7 +214,12 @@ def chat(body: ChatIn, x_anthropic_key: str | None = Header(default=None)):
                 metadata={"timings_ms": result.timings_ms, "ttr_ms": ttr_ms, "cost_usd": final.cost_usd})
             try:
                 sb_upsert("turns", {"conversation_id": body.conversationId, "question": body.question, "answer": final.text, "confidence": confidence,
-                                    "evidence": meta["chunks"], "timings_ms": result.timings_ms, "ttr_ms": ttr_ms, "tokens_in": final.tokens_in,
+                                    # every retrieved chunk, cited ones first in citation order, so the Evidence tab can
+                                    # show what was found but not used and explain the confidence (pipeline/diagnose.py)
+                                    # (cited=False throughout when Claude cited nothing and the top page was only shown as a fallback)
+                                    "evidence": [dict(c, cited=bool(final.cited)) for c in meta["chunks"]]
+                                                + [dict(e.to_chunk(i), cited=False) for i, e in enumerate(result.evidence) if e not in cited_ev],
+                                    "timings_ms": result.timings_ms, "ttr_ms": ttr_ms, "tokens_in": final.tokens_in,
                                     "tokens_out": final.tokens_out, "cost_usd": final.cost_usd, "trace_id": trace_id_of(trace), "status": "ok" if not final.note else "warn"})
             except Exception:
                 pass
@@ -411,8 +416,16 @@ def evidence_turns(workspace: str, limit: int = 100):
         except Exception:  # noqa: BLE001
             return None
 
-    return {"turns": [{**r, "cost_usd": float(r.get("cost_usd") or 0), "evidence": r.get("evidence") or [], "timings_ms": r.get("timings_ms") or {},
-                       "trace_url": trace_url(r.get("trace_id")), "model": by_id[r["conversation_id"]].get("answer_model"), "mode": by_id[r["conversation_id"]].get("mode")} for r in rows]}
+    from pipeline.diagnose import diagnose
+
+    out = []
+    for r in rows:
+        mode = by_id[r["conversation_id"]].get("mode")
+        chunks = r.get("evidence") or []
+        out.append({**r, "cost_usd": float(r.get("cost_usd") or 0), "evidence": [c for c in chunks if c.get("cited", True)], "timings_ms": r.get("timings_ms") or {},
+                    "trace_url": trace_url(r.get("trace_id")), "model": by_id[r["conversation_id"]].get("answer_model"), "mode": mode,
+                    "diagnosis": diagnose(r, mode)})
+    return {"turns": out}
 
 
 # ---------------------------------------------------------------------------- evals

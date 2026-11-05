@@ -26,8 +26,10 @@ interface Workspace {
 interface Turn {
   id: number; conversation_id: string; question: string; answer: string | null; confidence: Confidence | null; evidence: EvidenceChunk[]; timings_ms: Record<string, number>;
   ttr_ms: number | null; tokens_in: number | null; tokens_out: number | null; cost_usd: number; trace_id: string | null; trace_url: string | null; status: string; created_at: string;
-  model: string | null; mode: string | null;
+  model: string | null; mode: string | null; diagnosis?: Diagnosis;
 }
+interface Finding { level: "bad" | "warn" | "info"; title: string; detail: string }
+interface Diagnosis { verdict: "ok" | "warn" | "bad"; headline: string | null; confidence_why: string; findings: Finding[]; full_ranking: boolean; uncited: EvidenceChunk[] }
 
 const CONF: Record<string, string> = { high: "bg-success", medium: "bg-warning", low: "bg-destructive" };
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`);
@@ -134,6 +136,62 @@ function Summary({ ws }: { ws: Workspace }) {
 
 // ---------------------------------------------------------------------------- queries: every question, its evidence, latency and cost
 
+const LEVEL: Record<string, string> = { ok: "bg-success", bad: "bg-destructive", warn: "bg-warning", info: "bg-muted-foreground" };
+
+/**
+ * Backtracking for one answer: the confidence rule spelled out for this turn, what looks wrong (from pipeline/diagnose.py),
+ * and the retrieved pages Claude did not cite, so a bad answer can be traced to the stage that caused it.
+ */
+function Backtrack({ t, onExplain }: { t: Turn; onExplain: (q: string) => void }) {
+  const d = t.diagnosis;
+  if (!d) return null;
+  return (
+    <div className="grid gap-2.5 rounded-lg border border-border bg-secondary/30 p-3 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Backtrack</span>
+        <span className={cn("size-1.5 rounded-full", LEVEL[d.verdict])} aria-hidden="true" />
+        <span className="font-medium">{d.headline}</span>
+      </div>
+      <div className="text-muted-foreground"><span className="text-foreground">Why confidence is {t.confidence ?? "n/a"}: </span>{d.confidence_why.replace(/^(High|Medium|Low): /, "")}</div>
+      {d.findings.length ? (
+        <ul className="grid gap-1.5">
+          {d.findings.map((f, i) => (
+            <li key={i} className="grid grid-cols-[10px_minmax(0,1fr)] items-baseline gap-2">
+              <span className={cn("size-1.5 translate-y-[-1px] rounded-full", LEVEL[f.level])} aria-hidden="true" />
+              <span><b className="font-medium">{f.title}.</b> <span className="text-muted-foreground">{f.detail}</span></span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {d.uncited.length ? (
+        <Collapsible className="grid gap-1.5">
+          <CollapsibleTrigger className="group inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+            <ChevronRight className="size-3 transition-transform group-data-[panel-open]:rotate-90" />
+            Retrieved but not cited ({d.uncited.length})
+          </CollapsibleTrigger>
+          <CollapsibleContent className="grid gap-1.5">
+            {d.uncited.map((c) => (
+              <div key={c.id} className="grid gap-1 rounded-md border border-border bg-card px-2.5 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[11px] text-muted-foreground">
+                  <b className="text-foreground">#{c.scores.fusedRank ?? "?"}</b><span>p.{c.pno}</span><span>{c.id}</span><Kind kind={c.kind} />
+                  {c.scores.visualRank != null ? <span>visual #{c.scores.visualRank}</span> : null}
+                  {c.scores.textRank != null ? <span>text #{c.scores.textRank}</span> : null}
+                  {c.scores.rerank != null ? <span>rerank {c.scores.rerank.toFixed(2)}</span> : null}
+                </div>
+                <div className="line-clamp-2 text-muted-foreground">{c.snippet}</div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+      <div className="text-xs text-muted-foreground">
+        Next: <button type="button" onClick={() => onExplain(t.question)} className="underline underline-offset-2 hover:text-foreground">Explain this retrieval</button> re-runs every stage for this question;
+        {t.trace_url ? <> the <a href={t.trace_url} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Langfuse trace</a> has each stage&apos;s ranked pages.</> : " traces need Langfuse keys."}
+      </div>
+    </div>
+  );
+}
+
 function TurnRow({ t, onExplain, role }: { t: Turn; onExplain: (q: string) => void; role?: "baseline" | "improvement" }) {
   const [open, setOpen] = useState(false);
   const [evOpen, setEvOpen] = useState(true);
@@ -160,6 +218,11 @@ function TurnRow({ t, onExplain, role }: { t: Turn; onExplain: (q: string) => vo
             {t.model ? <span className="font-mono">{t.model}</span> : null}
             {t.mode && !role ? <span>{fmtMode(t.mode)}</span> : null}
             {!role ? <span className="font-mono">{when(t.created_at)}</span> : null}
+            {t.diagnosis && t.diagnosis.verdict !== "ok" ? (
+              <span className={cn("inline-flex items-center gap-1.5", t.diagnosis.verdict === "bad" ? "text-destructive" : "text-warning")}>
+                <span className={cn("size-1.5 rounded-full", LEVEL[t.diagnosis.verdict])} aria-hidden="true" />{t.diagnosis.headline}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="grid justify-items-end gap-0.5 font-mono text-[11px] text-muted-foreground">
@@ -173,6 +236,7 @@ function TurnRow({ t, onExplain, role }: { t: Turn; onExplain: (q: string) => vo
           <div className="flex flex-wrap gap-1.5">
             {stages.map(([k, v]) => <Stat key={k} label={k} value={fmtMs(v)} sub={ttr ? `${Math.round((v / ttr) * 100)}%` : undefined} />)}
           </div>
+          <Backtrack t={t} onExplain={onExplain} />
           <AnswerText text={t.answer ?? ""} onHover={setActive} onClick={(i) => { setEvOpen(true); setActive(i); setTimeout(() => setActive(null), 1600); }} />
           {cited ? <EvidencePanel messageId={`turn-${t.id}`} chunks={t.evidence} open={evOpen} onOpenChange={setEvOpen} activeIndex={active} /> : null}
           <div className="flex flex-wrap gap-2">

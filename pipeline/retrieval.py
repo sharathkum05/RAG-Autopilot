@@ -66,7 +66,8 @@ class Evidence:
             "id": bc.get("id") or self.page_id, "doc": self.doc_name, "page": self.page_no, "pno": self.page_no,
             "kind": bc.get("kind", "text"), "boxes": [bc["bbox"]] if bc.get("bbox") else [], "image": self.image_url or "",
             "snippet": (bc.get("text") or self.page_text or "")[:700], "highlight": None,
-            "scores": {"visualRank": self.visual_rank, "visualScore": self.visual_score, "textRank": self.text_rank, "textScore": self.text_score, "fusedRank": self.rank, "rerank": self.rerank_score},
+            "scores": {"visualRank": self.visual_rank, "visualScore": self.visual_score, "textRank": self.text_rank, "textScore": self.text_score, "fusedRank": self.rank, "rerank": self.rerank_score,
+                       "final": round(float(self.score), 4)},   # the score the final ranking sorted by (rerank score, or fused score)
         }
 
 
