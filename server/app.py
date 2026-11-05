@@ -184,7 +184,7 @@ def chat(body: ChatIn, x_anthropic_key: str | None = Header(default=None)):
                 return
 
             from pipeline.answer import stream_answer
-            yield ndjson({"type": "step", "step": {"name": "Answering", "detail": f"{model} · top 3 pages as citable documents", "state": "active"}})
+            yield ndjson({"type": "step", "step": {"name": "Answering", "detail": f"{model} · top {settings().answer_pages} pages as citable documents", "state": "active"}})
             final = None
             try:
                 for kind, payload in stream_answer(body.question, result.evidence, model=model, api_key=x_anthropic_key, trace=trace):

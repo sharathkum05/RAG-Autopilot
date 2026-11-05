@@ -62,12 +62,12 @@ def build_messages(question: str, evidence: list[Evidence], with_images: bool = 
     return [{"role": "user", "content": content}]
 
 
-def stream_answer(question: str, evidence: list[Evidence], model: str | None = None, api_key: str | None = None, n_pages: int = 3, trace=None) -> Iterator[tuple[str, str | AnswerResult]]:
+def stream_answer(question: str, evidence: list[Evidence], model: str | None = None, api_key: str | None = None, n_pages: int | None = None, trace=None) -> Iterator[tuple[str, str | AnswerResult]]:
     """Yields ("token", text) as the answer streams, with " [n]" markers appended after cited passages, then ("final", AnswerResult)."""
     s = settings()
     model = model or s.answer_model
     client = anthropic.Anthropic(api_key=api_key or s.anthropic_api_key or None)
-    ev = evidence[:n_pages]
+    ev = evidence[: n_pages or s.answer_pages]
     messages = build_messages(question, ev)
     extra: dict = {}
     if model in FALLBACK_MODELS:

@@ -151,11 +151,12 @@ def main() -> None:
     ap.add_argument("--sample", type=int, default=0, help="a seeded random subset of N queries (the same N for every config)")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--n-pages", type=int, default=3)
+    ap.add_argument("--n-pages", type=int, default=0, help="pages the model reads; 0 = settings().answer_pages")
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--hardware", default="")
     ap.add_argument("--dry-run", action="store_true", help="score and print, do not write the answer_eval_runs row")
     args = ap.parse_args()
+    args.n_pages = args.n_pages or settings().answer_pages
     if args.judge_run:
         return judge_existing(args.judge_run, args.workers)
     if args.rescore_run:

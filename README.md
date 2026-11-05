@@ -130,7 +130,7 @@ page's full text as a citable document plus the page image. Nothing is lost at a
 points to the chunk that ranked, with its bounding box.
 
 **Page boundaries.** Evidence that spans two pages ranks as two pages. Each page competes independently in both the
-text and the visual list, the model reads the top three, and the citations name both pages. A table that continues
+text and the visual list, the model reads the top five, and the citations name both pages. A table that continues
 onto the next page ranks on both because the header is repeated in each part. This is what the benchmark measures
 too: labels are per page.
 
@@ -153,8 +153,8 @@ Both configs share the chunks, the encoders and the answer step; one stage is th
 |---|---|---|
 | Lists | bge-m3 dense top 50 and BM25 top 50 over chunks, RRF inside Qdrant, mapped to pages | the same list |
 | Rerank | none: the top 5 is the head of the fused list | bge-reranker-v2-m3 cross-encoder re-scores the top 20 pages on (question, page text), then top 5 |
-| Pages to the model | top 3 | top 3 |
-| Meaning | the standard text RAG | a second, slower read of the candidates that puts the labelled page in the three pages the model reads more often |
+| Pages to the model | top 5 (top 3 in the eval runs below) | top 5 (top 3 in the eval runs below) |
+| Meaning | the standard text RAG | a second, slower read of the candidates that puts the labelled page in the pages the model reads more often |
 
 In the UI the two are labelled **Hybrid RAG without reranker** and **Hybrid RAG with reranker**; the config ids are
 `text_hybrid` and `text_hybrid_rerank`.
@@ -164,8 +164,8 @@ Also implemented and measured: `fused` (the text list plus a ColQwen2.5 page-ima
 baseline on answers over all 79 queries, at a GPU per query and about twice the latency, so it stays the Playground
 default for slides and scans rather than the dataset improvement.
 
-**Answer step.** Claude Opus 5.5 gets the top three pages as citable documents plus their images, with native
-citations. The model's citations become the `[n]` markers; the UI maps each to the chunk, the page and the region.
+**Answer step.** Claude Opus 5.5 gets the top five pages as citable documents plus their images, with native
+citations (`answer_pages` in `pipeline/config.py`; it was three for the evaluation runs in section 6). The model's citations become the `[n]` markers; the UI maps each to the chunk, the page and the region.
 The system prompt requires answering from the pages only and saying so when they lack the answer.
 
 ## 6. Evaluation
@@ -191,7 +191,8 @@ shows for all 79 queries, that did not turn into better answers.
 ### 6.2 Answers, end to end: two eval pipelines
 
 Both configs answered the same seeded sample of 30 of the 79 queries (seed 42, the same 30 for both) exactly as the
-app does it: retrieve, read the top three pages, answer with Claude Opus 5.5, cite. Every answer is then graded by two
+app did it at the time: retrieve, read the top three pages, answer with Claude Opus 5.5, cite. The app now reads five
+pages; these runs have not been repeated at five yet, so the numbers below are for three. Every answer is then graded by two
 independent pipelines, the deterministic checks here and the LLM judge in 6.3. The Answer Evals tab shows only these
 two runs: an intro naming the two pipelines, one row of latency and cost, then a tab per pipeline with its rubric and
 its baseline → improvement cards, and every answer next to its reference, switchable between the two configs.
@@ -352,7 +353,7 @@ Hand-drawn versions, open at excalidraw.com:
 |---|---|---|
 | Keep one container warm | $0.80 per hour, about $19 per day | Modal L4 price × 24 h |
 | Full OCR ingestion of the 415-page book (instead of the shipped OCR) | 2 to 3 × the 418 s build | per-page Docling timings seen on uploads |
-| Five pages to the model instead of three | about +60% input tokens, about $0.09 per answer | token counts from the eval runs |
+| Five pages to the model (the current setting) instead of three | about +60% input tokens, about $0.09 per answer | token counts from the eval runs |
 | Past a few thousand pages | pooled-vector gate before MaxSim | the pooled vector is already stored |
 
 ## 9. Implemented vs proposed
@@ -365,7 +366,7 @@ waterfalls and in-process GPU sampling, Settings with live key tests, Modal depl
 
 **Proposed.**
 
-- Read five pages, not three: the remaining retrieval failures are labelled pages at rank 4 to 10.
+- Re-run both answer evals at five pages (now the default) to measure what reading five instead of three buys.
 - Query-type routing: run the visual list only when the question looks like it needs a table or figure.
 - Cross-page questions: a second retrieval round seeded by the first answer.
 - Rerank at chunk level, or a reranker that sees the page image, so the fused list can be reranked without losing the visual signal.

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     top_k_per_path: int = 50
     fused_k: int = 20
     final_k: int = 5
+    answer_pages: int = 5           # pages (text + image) the answer model reads, out of the final_k shown as evidence
     rrf_k: int = 60
     pages_collection: str = "matt_pages"
     chunks_collection: str = "matt_chunks"

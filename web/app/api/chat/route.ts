@@ -35,13 +35,13 @@ export async function POST(req: Request) {
         await sleep(Math.min(ms, 300) + 120);
         send({ type: "step", step: { name, detail, state: "done", ms } });
       }
-      send({ type: "step", step: { name: "Answering", detail: "claude-opus-5-5 · top 3 pages as citable documents", state: "active" } });
+      send({ type: "step", step: { name: "Answering", detail: "claude-opus-5-5 · top 5 pages as citable documents", state: "active" } });
       await sleep(350);
       for (const word of ans.text.split(" ")) {
         send({ type: "token", text: word + " " });
         await sleep(18);
       }
-      send({ type: "step", step: { name: "Answering", detail: "claude-opus-5-5 · top 3 pages as citable documents", state: "done", ms: Date.now() - t0 } });
+      send({ type: "step", step: { name: "Answering", detail: "claude-opus-5-5 · top 5 pages as citable documents", state: "done", ms: Date.now() - t0 } });
       send({ type: "evidence", meta: { ...ans.meta, ttrMs: Date.now() - t0 } });
       send({ type: "done" });
       controller.close();
