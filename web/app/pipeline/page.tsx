@@ -15,8 +15,7 @@ import type { AssistantMeta, ChatStep, Confidence, EvidenceChunk } from "@/lib/t
 
 /**
  * ViDoRe Pipeline: the baseline (text hybrid) and the improvement (text hybrid + cross-encoder rerank) side by side.
- * The setup cards lead with the answer evals (deterministic checks, LLM judge, latency, cost over the same sampled queries)
- * and keep the retrieval metrics as diagnostics; compare mode runs one question through both configs at once
+ * Two short setup cards name the configs; compare mode runs one question through both configs at once
  * and ticks the pages the benchmark labels as relevant, so the difference is visible on real pages, not only in a table.
  */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -31,58 +30,22 @@ interface RunRow { id: string; config: string; metrics: Metrics; hardware: strin
 interface Stages { visual: boolean; dense: boolean; bm25: boolean; rerank: boolean }
 interface Info { label: string; detail: string; stages: Stages; role: Role | null }
 interface Summary { configs: string[]; latest: RunRow[]; baseline: string; improvement: string; info?: Record<string, Info> }
-interface AESummary { n_queries: number; pass_rate: number; mean_score: number; checks: Record<string, { pass_rate: number }>; judge: { mean_overall?: number | null; dims?: Record<string, number> | null } | null; cost_usd: number; latency_ms: Record<string, Lat>; sample?: { n: number; seed: number } }
-interface AERun { id: string; config: string; answer_model: string; n_pages: number; summary: AESummary }
-interface AEOverview { latest: AERun[]; baseline: string; improvement: string }
 interface BenchQuery { query_id: number; query: string; answer: string; content_type: string[]; relevant: [number, number][]; ranks: { baseline: number | null; improvement: number | null } }
 interface Column { config: string; role: Role; steps: ChatStep[]; text: string; meta?: AssistantMeta; pending: boolean; startedAt: number }
 interface Turn { id: string; question: string; bench?: BenchQuery; columns: Column[] }
 
 const CONF: Record<Confidence, string> = { high: "bg-success", medium: "bg-warning", low: "bg-destructive" };
-const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
-const stages = (st: Stages) => [
-  { name: "Docling chunks", on: st.dense || st.bm25 }, { name: "bge-m3 dense", on: st.dense }, { name: "BM25 sparse", on: st.bm25 },
-  { name: "ColQwen2.5 page vectors", on: st.visual }, { name: "RRF fusion", on: true }, { name: "bge-reranker", on: st.rerank },
-];
 
 // ------------------------------------------------------------------ setup cards
 
-function Stat({ label, value, delta }: { label: string; value: string; delta?: number | null }) {
+function SetupCard({ role, info }: { role: Role; info?: Info }) {
   return (
-    <div className="rounded-lg border border-border bg-background px-2.5 py-2">
-      <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5">
-        <span className="whitespace-nowrap font-mono text-[15px] font-medium">{value}</span>
-        {delta != null && Math.abs(delta) >= 0.05 ? <span className={cn("font-mono text-[11px]", delta > 0 ? "text-success" : "text-destructive")}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}</span> : null}
-      </div>
-    </div>
-  );
-}
-
-function SetupCard({ role, info, baseInfo, ae, aeBase }: { role: Role; info?: Info; baseInfo?: Info; ae?: AESummary; aeBase?: AESummary }) {
-  const added = info && baseInfo ? stages(info.stages).filter((s) => s.on && !stages(baseInfo.stages).find((b) => b.name === s.name)?.on).map((s) => s.name) : [];
-  const tiles: [string, string, number | null][] = ae ? [
-    ["Checks pass", pct(ae.pass_rate), aeBase ? (ae.pass_rate - aeBase.pass_rate) * 100 : null],
-    ["Judge / 5", ae.judge?.mean_overall != null ? ae.judge.mean_overall.toFixed(2) : "–", aeBase?.judge?.mean_overall != null && ae.judge?.mean_overall != null ? ae.judge.mean_overall - aeBase.judge.mean_overall : null],
-    ["TTR p50", `${(ae.latency_ms.total.p50 / 1000).toFixed(1)} s`, aeBase ? (ae.latency_ms.total.p50 - aeBase.latency_ms.total.p50) / 1000 : null],
-    ["$ / answer", `$${(ae.cost_usd / Math.max(1, ae.n_queries)).toFixed(3)}`, null],
-  ] : [];
-  return (
-    <div className={cn("rounded-xl border border-border bg-card p-4", role === "improvement" && "border-success/40")}>
+    <div className={cn("rounded-xl border border-border bg-card px-4 py-3.5", role === "improvement" && "border-success/40")}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline" className={cn("font-mono text-[10px] uppercase", role === "improvement" && "border-success/50 text-success")}>{role}</Badge>
         <span className="font-medium">{info?.label ?? role}</span>
-        <span className="text-xs text-muted-foreground">{role === "baseline" ? "what a standard text RAG ships" : added.length ? `adds ${added.join(" + ")}` : ""}</span>
       </div>
       <p className="mt-1.5 text-[12.5px] text-muted-foreground">{info?.detail}</p>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {info ? stages(info.stages).map((s) => (
-          <span key={s.name} className={cn("rounded-full border px-2 py-0.5 text-[11px]", s.on ? "border-border bg-background text-foreground" : "border-dashed border-border text-muted-foreground/70 line-through")}>{s.name}</span>
-        )) : null}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {tiles.length ? tiles.map(([label, value, delta]) => <Stat key={label} label={label} value={value} delta={role === "improvement" ? delta : null} />) : <div className="col-span-full text-xs text-muted-foreground">no answer-eval run stored yet</div>}
-      </div>
     </div>
   );
 }
@@ -234,7 +197,6 @@ function ModeToggle({ mode, onChange, disabled }: { mode: Mode; onChange: (m: Mo
 
 export default function PipelinePage() {
   const [s, setS] = useState<Summary | null>(null);
-  const [ae, setAe] = useState<AEOverview | null>(null);
   const [bench, setBench] = useState<BenchQuery[]>([]);
   const [mode, setMode] = useState<Mode>("compare");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -247,7 +209,6 @@ export default function PipelinePage() {
   useEffect(() => {
     try { const v = new URLSearchParams(window.location.search).get("q"); if (v != null && v !== "") setPreset(Number(v)); } catch { /* ignore */ }
     j<Summary>("/api/evals").then(setS).catch(() => setS({ configs: [], latest: [], baseline: "text_hybrid", improvement: "text_hybrid_rerank" }));
-    j<AEOverview>("/api/answer-evals").then(setAe).catch(() => {});
     j<{ queries: BenchQuery[] }>("/api/evals/queries").then((r) => setBench(r.queries ?? [])).catch(() => {});
   }, []);
   useEffect(() => { const el = threadRef.current; if (el && turns.length) el.scrollTop = el.scrollHeight; }, [turns]);
@@ -282,8 +243,6 @@ export default function PipelinePage() {
     setBusy(false);
   }, [busy, s, mode, patch]);
 
-  const aeOf = (cfg?: string) => ae?.latest.find((r) => r.config === cfg)?.summary;
-  const aeBase = aeOf(s?.baseline), aeImpr = aeOf(s?.improvement);
   const info = s?.info ?? {};
   const presetQ = preset != null ? bench.find((b) => b.query_id === preset) : undefined;
 
@@ -298,8 +257,8 @@ export default function PipelinePage() {
           <div className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-6">
             <div className="grid gap-3">
               <div className="grid gap-3 lg:grid-cols-2">
-                <SetupCard role="baseline" info={s ? info[s.baseline] : undefined} ae={aeBase} />
-                <SetupCard role="improvement" info={s ? info[s.improvement] : undefined} baseInfo={s ? info[s.baseline] : undefined} ae={aeImpr} aeBase={aeBase} />
+                <SetupCard role="baseline" info={s ? info[s.baseline] : undefined} />
+                <SetupCard role="improvement" info={s ? info[s.improvement] : undefined} />
               </div>
             </div>
             {presetQ ? (
